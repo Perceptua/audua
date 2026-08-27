@@ -1,0 +1,110 @@
+[project]
+name = "audua"
+version = "0.1.0"
+description = "Segment sporadic speech out of long recordings and transcribe it, locally."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Avery", email = "perceptua.blue@gmail.com" }]
+keywords = ["audio", "transcription", "whisper", "vad", "speech"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "silero-vad>=5.1",        # local, offline VAD
+    "faster-whisper>=1.0.0",  # local, offline transcription (CTranslate2 backend)
+    # torch arrives transitively via silero-vad, but it is declared directly on
+    # purpose: [tool.uv.sources] is only honoured for *direct* dependencies, so
+    # without this line the CPU-index pin below would silently do nothing.
+    "torch>=2.0",
+]
+
+# ffmpeg is a system binary, not a Python package.
+# See INSTALL-linux.md / INSTALL-windows.md.
+
+[project.scripts]
+audua = "audua.cli:main"
+
+[project.urls]
+Documentation = "https://github.com/perceptua/audua#readme"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/audua"]
+
+
+# ---------------------------------------------------------------------------
+# uv
+# ---------------------------------------------------------------------------
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+# Installed into the project venv on `uv sync` by default.
+default-groups = ["dev"]
+
+# Torch ships CUDA libraries in its default PyPI wheels, which makes the
+# install several GB. This pipeline only uses torch to run Silero VAD — a few
+# megabytes of model — so the CPU build is the right default on both OSes.
+#
+# On a GPU machine, override at install time:
+#   uv sync --extra-index-url https://download.pytorch.org/whl/cu124
+# or drop the [tool.uv.sources] block below.
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+
+# ---------------------------------------------------------------------------
+# tooling
+# ---------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# importmode=importlib keeps tests importing the *installed* package rather
+# than a stray copy on sys.path — the whole point of the src/ layout.
+addopts = "-q --import-mode=importlib"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "SIM",  # simplify
+    "PTH",  # prefer pathlib
+]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "B008",    # function calls in defaults — argparse patterns trip this
+    "SIM108",  # ternaries are not always clearer than if/else
+]
+
+[tool.ruff.lint.per-file-ignores]
+# The offline test shim deliberately fakes a module and uses broad excepts.
+"tools/run_tests.py" = ["B", "SIM", "PTH"]

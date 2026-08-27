@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Place this next to the audio file, named <source_stem>.overrides.json.",
+    "For session_one.m4a, that is session_one.overrides.json.",
+    "Every window listed here is ALWAYS saved as a clip, whether or not the",
+    "VAD heard anything there. Times accept seconds (12.5), MM:SS, or HH:MM:SS.mmm."
+  ],
+  "windows": [
+    {
+      "start": "00:12:30",
+      "end": "00:13:45",
+      "label": "quiet-passage-worth-keeping"
+    },
+    {
+      "start": 3600,
+      "end": 3665.5,
+      "label": "whispered-aside"
+    }
+  ]
+}

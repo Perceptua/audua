@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>audua</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>&#127908;</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="#/">audua</a>
+  <nav id="nav">
+    <a href="#/" data-route="">Dashboard</a>
+    <a href="#/processing" data-route="processing">Processing</a>
+    <a href="#/outputs" data-route="outputs">Outputs</a>
+  </nav>
+  <div class="topbar-right">
+    <span class="badge-readonly" title="This UI never writes to the filetree.">read-only</span>
+    <button id="refresh" class="icon-button" title="Re-read the filetree">&#8635;</button>
+  </div>
+</header>
+
+<div class="workspace" id="workspace">
+  <main id="view" aria-live="polite">
+    <div class="loading">Reading the filetree…</div>
+  </main>
+
+  <div id="gutter" class="gutter" role="separator" aria-orientation="vertical" tabindex="0"
+       aria-label="Resize the reading pane"
+       title="Drag to resize · arrow keys to nudge · double-click to reset"></div>
+
+  <aside id="reader" class="reader" hidden>
+    <button id="reader-rail" class="reader-rail" title="Expand the reading pane">
+      <span class="rail-chevron">&#171;</span>
+      <span class="rail-label" id="rail-label"></span>
+    </button>
+
+    <div class="reader-head">
+      <div class="reader-heading">
+        <div id="reader-title" class="reader-title"></div>
+        <div id="reader-sub" class="reader-sub"></div>
+      </div>
+      <button id="reader-collapse" class="icon-button" title="Collapse the reading pane">&#187;</button>
+      <button id="reader-close" class="icon-button" title="Close">&times;</button>
+    </div>
+    <div id="reader-body" class="reader-body doc"></div>
+  </aside>
+</div>
+
+<footer id="player" class="player" hidden>
+  <div class="player-meta">
+    <div id="player-title" class="player-title"></div>
+    <div id="player-sub" class="player-sub"></div>
+  </div>
+  <audio id="audio" controls preload="metadata"></audio>
+  <button id="player-close" class="icon-button" title="Close the player">&times;</button>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

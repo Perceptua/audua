@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# uv / packaging
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Pipeline data. The processing/ tree structure is tracked (see .gitkeep
+# files), but its contents are reproducible/user data and do not belong in
+# version control.
+processing/raw/*
+!processing/raw/failed/
+!processing/raw/processed/
+processing/raw/failed/*
+!processing/raw/failed/.gitkeep
+processing/raw/processed/*
+!processing/raw/processed/.gitkeep
+
+processing/output/*
+!processing/output/_batches/
+processing/output/_batches/*
+!processing/output/_batches/.gitkeep
+
+*.partial.*
+*.tmp
+
+# Audio and transcripts are user data, not project files.
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.opus
+!tests/**/*.wav
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

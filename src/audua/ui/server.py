@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import ssl
 import threading
 import webbrowser
 from http import HTTPStatus
@@ -271,12 +272,28 @@ class _Disconnected(Exception):
     """The client closed the connection; stop writing and move on."""
 
 
-def make_server(roots: Roots, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
-    """Bind a server over ``roots``. Port 0 picks a free one (used by tests)."""
+def make_server(
+    roots: Roots,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    *,
+    tls: tuple[Path, Path] | None = None,
+) -> ThreadingHTTPServer:
+    """Bind a server over ``roots``. Port 0 picks a free one (used by tests).
+
+    ``tls``, if given, is a ``(cert_path, key_path)`` pair — see
+    :mod:`audua.ui.tailscale`. The socket is wrapped after binding so a bad
+    cert fails at startup, not on the first request.
+    """
     handler = type("BoundAuduaHandler", (AuduaHandler,), {"roots": roots})
     server = ThreadingHTTPServer((host, port), handler)
     # Don't hold shutdown hostage to an in-flight audio stream.
     server.daemon_threads = True
+    if tls is not None:
+        cert_path, key_path = tls
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(certfile=str(cert_path), keyfile=str(key_path))
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     return server
 
 
@@ -286,11 +303,19 @@ def serve(
     host: str = "127.0.0.1",
     port: int = 8765,
     open_browser: bool = True,
+    tls: tuple[Path, Path] | None = None,
+    shown_host: str | None = None,
 ) -> int:
-    """Run the UI until interrupted."""
-    server = make_server(roots, host, port)
-    shown = "localhost" if host in {"127.0.0.1", "0.0.0.0", "::1"} else host
-    url = f"http://{shown}:{server.server_address[1]}/"
+    """Run the UI until interrupted.
+
+    ``shown_host`` overrides the hostname printed in the URL — used for
+    ``--tailscale``, where the cert is issued for the tailnet MagicDNS name,
+    not the bind address itself.
+    """
+    server = make_server(roots, host, port, tls=tls)
+    scheme = "https" if tls is not None else "http"
+    shown = shown_host or ("localhost" if host in {"127.0.0.1", "0.0.0.0", "::1"} else host)
+    url = f"{scheme}://{shown}:{server.server_address[1]}/"
 
     print(f"audua UI — {url}")
     print(f"  inbox:   {roots.raw}")

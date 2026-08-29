@@ -5,6 +5,7 @@
 #   make run FILE=recording.m4a ARGS="--merge-gap 8"
 #   make batch
 #   make ui-up
+#   make ui-up ARGS=--tailscale  # reachable from the tailnet, HTTPS
 #   make ui-down
 
 .DEFAULT_GOAL := help

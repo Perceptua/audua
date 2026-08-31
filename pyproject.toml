@@ -22,6 +22,10 @@ dependencies = [
     # purpose: [tool.uv.sources] is only honoured for *direct* dependencies, so
     # without this line the CPU-index pin below would silently do nothing.
     "torch>=2.0",
+    # Same reasoning as torch above: silero-vad pulls torchaudio in transitively,
+    # and without a direct declaration it resolves to a PyPI wheel linked
+    # against CUDA runtime libraries that aren't present on CPU-only machines.
+    "torchaudio>=2.0",
 ]
 
 # ffmpeg is a system binary, not a Python package.
@@ -64,6 +68,9 @@ default-groups = ["dev"]
 # or drop the [tool.uv.sources] block below.
 [tool.uv.sources]
 torch = [
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchaudio = [
     { index = "pytorch-cpu", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]
 

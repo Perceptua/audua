@@ -12,5 +12,14 @@ shells out or depends on a desktop toolkit.
 
 from .server import make_server, serve
 from .state import Roots, StateError
+from .tailscale import TailscaleError, provision_cert, tailscale_ip
 
-__all__ = ["Roots", "StateError", "make_server", "serve"]
+__all__ = [
+    "Roots",
+    "StateError",
+    "TailscaleError",
+    "make_server",
+    "provision_cert",
+    "serve",
+    "tailscale_ip",
+]

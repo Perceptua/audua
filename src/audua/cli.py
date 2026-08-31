@@ -7,6 +7,7 @@
     python -m audua verify ./output/recording   # re-check 1:1 pairing on disk
     python -m audua ui                          # browse the filetree in a browser
     python -m audua ui --background             # same, detached; logs to <output>/_ui.log
+    python -m audua ui --tailscale              # reachable from the tailnet, HTTPS
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from .config import Config, ConfigError
 from .pipeline import PipelineError, discover_sources, process_file, verify_pairing
 from .segments import OverrideError
 from .transcribe import TranscriberUnavailable
-from .ui import Roots, serve
+from .ui import Roots, TailscaleError, provision_cert, serve, tailscale_ip
 from .vad import VadUnavailable
 
 
@@ -148,6 +149,11 @@ def _build_parser() -> argparse.ArgumentParser:
                          "Clip audio is personal data; widen this deliberately.")
     ui.add_argument("--port", type=int, default=8765,
                     help="Port to bind. 0 picks a free one. Default: 8765")
+    ui.add_argument("--tailscale", action="store_true",
+                    help="Bind this machine's Tailscale IP and serve HTTPS with a "
+                         "tailscale-issued cert for its MagicDNS name, so other devices "
+                         "on the tailnet can reach it at a trusted https:// URL. "
+                         "Overrides --host. Requires `tailscale` to be installed and up.")
     ui.add_argument("--no-browser", action="store_true",
                     help="Do not open a browser window on start.")
     ui.add_argument("-b", "--background", action="store_true",
@@ -240,7 +246,21 @@ def _ui_command(args: argparse.Namespace) -> int:
         return 2
     if args.background:
         return _ui_background(args, roots)
-    return serve(roots, host=args.host, port=args.port, open_browser=not args.no_browser)
+
+    host, tls, shown_host = args.host, None, None
+    if args.tailscale:
+        try:
+            host = tailscale_ip()
+            cert_path, key_path, fqdn = provision_cert(roots.output / ".certs")
+        except TailscaleError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        tls, shown_host = (cert_path, key_path), fqdn
+
+    return serve(
+        roots, host=host, port=args.port, open_browser=not args.no_browser,
+        tls=tls, shown_host=shown_host,
+    )
 
 
 def _ui_background(args: argparse.Namespace, roots: Roots) -> int:
@@ -262,6 +282,8 @@ def _ui_background(args: argparse.Namespace, roots: Roots) -> int:
     ]
     if args.no_browser:
         command.append("--no-browser")
+    if args.tailscale:
+        command.append("--tailscale")
 
     detach: dict = {}
     if sys.platform == "win32":
@@ -278,9 +300,11 @@ def _ui_background(args: argparse.Namespace, roots: Roots) -> int:
             **detach,
         )
 
-    shown = "localhost" if args.host in {"127.0.0.1", "0.0.0.0", "::1"} else args.host
     print(f"audua UI starting in background (pid {process.pid}).")
-    if args.port:
+    if args.tailscale:
+        print("  url:  serving over Tailscale — check the log for the https:// URL.")
+    elif args.port:
+        shown = "localhost" if args.host in {"127.0.0.1", "0.0.0.0", "::1"} else args.host
         print(f"  url:  http://{shown}:{args.port}/")
     else:
         print("  url:  port 0 auto-assigns — check the log for the bound port.")

@@ -344,6 +344,7 @@ recording, and it binds to `127.0.0.1` because clip audio is personal data.
 | `-o, --output DIR` | `processing/output` | Output root. |
 | `--host` | `127.0.0.1` | This machine only. Widen deliberately. |
 | `--port` | `8765` | `0` picks a free one. |
+| `--tailscale` | off | Bind this machine's Tailscale IP and serve HTTPS with a tailscale-issued cert for its MagicDNS name — reachable from other devices on the tailnet at a trusted `https://` URL. Overrides `--host`. Requires `tailscale` installed and up. |
 | `--no-browser` | off | Do not open a browser window on start. |
 | `-b, --background` | off | Start detached and return immediately. Logs to `<output>/_ui.log`. |
 

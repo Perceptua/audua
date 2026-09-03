@@ -286,6 +286,64 @@ def test_facts_fall_back_to_the_manifest_when_no_report_covers_a_source(tree):
     assert done["duration_hms"] == "00:10:00"
 
 
+def _start_run(tree: Roots, name: str, clips_planned: int, clips_written: list[dict]) -> None:
+    """Simulate `process_file` mid-run: a manifest with clips but no `completed`."""
+    run = tree.output / name
+    run.mkdir()
+    manifest = _manifest(name, clips_written)
+    manifest["stats"]["clip_count"] = clips_planned
+    del manifest["completed"]
+    del manifest["counts"]
+    del manifest["pairing"]
+    (run / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_a_source_mid_run_is_reported_as_processing(tree):
+    _start_run(tree, "waiting", clips_planned=10, clips_written=[_clip(1, 10), _clip(2, 30)])
+
+    waiting = next(s for s in state.list_sources(tree) if s["name"] == "waiting.wav")
+    assert waiting["status"] == "ready"
+    assert waiting["processing"] is True
+    assert waiting["clips_done"] == 2
+    assert waiting["clip_count"] == 10
+
+    # A finished run, or one that never started, is not "processing".
+    done = next(s for s in state.list_sources(tree) if s["name"] == "done.wav")
+    broken = next(s for s in state.list_sources(tree) if s["name"] == "broken.wav")
+    assert done["processing"] is False
+    assert broken["processing"] is False
+
+
+def test_overview_reports_the_active_run_and_the_queue_fraction(tree):
+    _start_run(tree, "waiting", clips_planned=10, clips_written=[_clip(1, 10), _clip(2, 30)])
+
+    processing = state.overview(tree)["processing"]
+    assert processing == {
+        "in_progress": True,
+        "active_source": "waiting.wav",
+        "clips_done": 2,
+        "clips_total": 10,
+        "queue_total": 1,
+        "fraction": 0.2,
+        "percent": 20,
+    }
+
+
+def test_overview_processing_is_quiet_when_nothing_is_running(tree):
+    # `waiting.wav` sits in the inbox with no manifest yet -- queued, not started.
+    processing = state.overview(tree)["processing"]
+    assert processing["in_progress"] is False
+    assert processing["active_source"] is None
+    assert processing["fraction"] == 0.0
+
+    # With nothing at all waiting, there is no queue to report a fraction for.
+    (tree.raw / "waiting.wav").unlink()
+    (tree.raw / "waiting.overrides.json").unlink()
+    processing = state.overview(tree)["processing"]
+    assert processing["fraction"] is None
+    assert processing["percent"] is None
+
+
 # --------------------------------------------------------------------------
 # outputs
 # --------------------------------------------------------------------------

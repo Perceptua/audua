@@ -236,6 +236,17 @@ def _source_record(path: Path, status: str, roots: Roots, index: dict[str, dict]
     stats = (manifest or {}).get("stats") or {}
     source = (manifest or {}).get("source") or {}
 
+    # `process_file` rewrites manifest.json after every clip and only adds
+    # `completed` once the whole source is done -- so a source still sitting in
+    # the inbox with a manifest that has clips but no `completed` is the one
+    # `audua batch` is working on right now. `clips_done` undercounts slightly
+    # while the leading clips were all reused (see pipeline.process_file), but
+    # it never overcounts, and it always catches up on the next real clip.
+    clips_written = (manifest or {}).get("clips")
+    processing = (
+        status == "ready" and manifest is not None and "completed" not in manifest
+    )
+
     return {
         "name": path.name,
         "stem": path.stem,
@@ -251,6 +262,8 @@ def _source_record(path: Path, status: str, roots: Roots, index: dict[str, dict]
         "reasons": result.get("reasons") or [],
         "last_run": result.get("batch_started") or (manifest or {}).get("completed"),
         "summary_needed": bool(result.get("summary_needed")),
+        "processing": processing,
+        "clips_done": len(clips_written) if processing and clips_written is not None else None,
     }
 
 
@@ -470,6 +483,37 @@ def media_path(roots: Roots, name: str, filename: str) -> Path:
 # the dashboard
 # --------------------------------------------------------------------------
 
+def _processing_status(waiting: list[dict]) -> dict:
+    """What `audua batch` is doing to the inbox right now, if anything.
+
+    `audua batch` works the inbox one source at a time, so at most one waiting
+    source can be mid-run; every other waiting source is simply next in line.
+    The overall fraction weighs the active source by its own clip progress and
+    every other waiting source as not-yet-started -- the fairest read available
+    without the batch itself publishing a plan, and it can only undercount
+    (never overcount) if a source is dropped into the inbox mid-run.
+    """
+    active = next((s for s in waiting if s["processing"]), None)
+    total = len(waiting)
+
+    fraction = None
+    if total:
+        done = 0.0
+        if active and active.get("clip_count"):
+            done = min(1.0, (active.get("clips_done") or 0) / active["clip_count"])
+        fraction = done / total
+
+    return {
+        "in_progress": active is not None,
+        "active_source": active["name"] if active else None,
+        "clips_done": active.get("clips_done") if active else None,
+        "clips_total": active.get("clip_count") if active else None,
+        "queue_total": total,
+        "fraction": fraction,
+        "percent": round(fraction * 100) if fraction is not None else None,
+    }
+
+
 def overview(roots: Roots) -> dict:
     """Everything the front page shows, in one read of the tree."""
     sources = list_sources(roots)
@@ -496,6 +540,7 @@ def overview(roots: Roots) -> dict:
             "ready_bytes": sum(s["size"] for s in waiting),
             "oldest_waiting": min((s["modified"] or "" for s in waiting), default=None),
         },
+        "processing": _processing_status(waiting),
         "outputs": {
             "total": len(runs),
             "ok": sum(1 for r in runs if r["status"] == "ok"),

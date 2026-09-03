@@ -83,8 +83,24 @@ async function api(path) {
 
 function pill(status) {
   const label = { ok: 'ok', ready: 'ready', processed: 'processed', failed: 'failed',
-                  incomplete: 'incomplete' }[status] || status;
+                  incomplete: 'incomplete', processing: 'processing' }[status] || status;
   return `<span class="pill ${esc(status)}">${esc(label)}</span>`;
+}
+
+/* `pct` null means "known to be running, but no clip count yet" — the manifest
+ * hasn't been written for this source's first clip. See
+ * audua.ui.state._source_record: `clips_done`/`clip_count` only appear once
+ * that first write has happened. */
+function progressBar(pct, label, text) {
+  return `<div class="progress-bar"><i style="width:${pct == null ? 6 : Math.min(100, pct)}%"></i></div>
+    <div class="progress-label"><span>${esc(label)}</span>
+      <b>${esc(pct == null ? 'starting…' : text)}</b></div>`;
+}
+
+function clipProgress(done, total, label) {
+  const known = total != null && total > 0;
+  const pct = known ? Math.round((100 * (done || 0)) / total) : null;
+  return progressBar(pct, label, known ? `${pct}% · ${done || 0}/${total} clips` : '');
 }
 
 function flags(list, extraClass = '') {
@@ -303,7 +319,7 @@ document.addEventListener('click', (event) => {
 /* ------------------------------------------------------------ dashboard */
 
 function renderDashboard(data) {
-  const { inbox, outputs, clips, latest_batch: batch, roots } = data;
+  const { inbox, outputs, clips, latest_batch: batch, roots, processing } = data;
 
   const stats = [
     { n: inbox.ready, k: 'waiting', x: inbox.ready ? bytes(inbox.ready_bytes) : 'inbox empty',
@@ -357,13 +373,25 @@ function renderDashboard(data) {
     </div>`;
   }
 
+  const processingHtml = processing.in_progress ? `
+    <div class="card panel">
+      <h3>Processing — ${esc(processing.active_source)}</h3>
+      ${clipProgress(processing.clips_done, processing.clips_total, 'this file')}
+      ${processing.queue_total > 1 ? progressBar(
+        processing.percent, `inbox queue · ${processing.queue_total} waiting`,
+        `${processing.percent}% of the queue`,
+      ) : ''}
+    </div>` : '';
+
   const waitingHtml = data.waiting.length ? `
     <h2 class="section">Waiting in the inbox</h2>
     <div class="card wrap"><table class="grid"><tbody>
       ${data.waiting.map((s) => `<tr>
-        <td>${esc(s.name)}${s.has_overrides ? ' <span class="flag muted">overrides</span>' : ''}</td>
+        <td>${esc(s.name)}${s.has_overrides ? ' <span class="flag muted">overrides</span>' : ''}
+          ${s.processing ? ' ' + pill('processing') : ''}</td>
         <td class="num">${esc(bytes(s.size))}</td>
         <td class="num">${esc(ago(s.modified))}</td>
+        <td class="row-progress">${s.processing ? clipProgress(s.clips_done, s.clip_count, '') : ''}</td>
       </tr>`).join('')}
     </tbody></table></div>` : '';
 
@@ -377,6 +405,7 @@ function renderDashboard(data) {
       <div class="sub">inbox <code>${esc(roots.raw)}</code> · outputs <code>${esc(roots.output)}</code></div>
     </div>
     <div class="stats">${statHtml}</div>
+    ${processingHtml}
     ${batchHtml}
     ${waitingHtml}
     ${recentHtml}`;
@@ -387,7 +416,7 @@ function renderDashboard(data) {
 function sourceTable(rows) {
   return `<div class="card wrap"><table class="grid">
     <thead><tr>
-      <th>Recording</th><th>Status</th><th>Size</th><th>Length</th>
+      <th>Recording</th><th>Status</th><th>Progress</th><th>Size</th><th>Length</th>
       <th>Clips</th><th>Last run</th><th>Output</th>
     </tr></thead>
     <tbody>${rows.map((s) => `
@@ -397,7 +426,8 @@ function sourceTable(rows) {
           ${s.has_overrides ? '<span class="flag muted">overrides</span>' : ''}
           ${s.reasons.length ? `<div class="reasons">${esc(s.reasons.join('; '))}</div>` : ''}
         </td>
-        <td>${pill(s.status)}</td>
+        <td>${pill(s.processing ? 'processing' : s.status)}</td>
+        <td class="row-progress">${s.processing ? clipProgress(s.clips_done, s.clip_count, '') : ''}</td>
         <td class="num">${esc(bytes(s.size))}</td>
         <td class="num">${esc(s.duration_hms || '—')}</td>
         <td class="num">${s.clip_count == null ? '—' : `${esc(s.clip_count)}${
@@ -589,9 +619,38 @@ function renderDetail(run) {
 
 /* --------------------------------------------------------------- router */
 
+/* A file transcribes over tens of seconds to minutes, so 5s keeps the bar
+ * visibly moving without hammering the server. */
+const POLL_MS = 5000;
+let pollTimer = null;
+
+function stopPoll() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+/* Re-fetches and re-renders in place -- unlike `route()`, it never shows the
+ * "Reading the filetree…" placeholder, so a tick never interrupts whatever
+ * the user is doing (scrolling, reading a row) with a flash of empty page. */
+function poll(reload) {
+  stopPoll();
+  pollTimer = setInterval(() => { reload().catch(() => stopPoll()); }, POLL_MS);
+}
+
 const routes = [
-  { match: /^$/, load: () => api('/api/overview').then(renderDashboard) },
-  { match: /^processing$/, load: () => api('/api/sources').then(renderProcessing) },
+  {
+    match: /^$/,
+    load: () => {
+      const reload = () => api('/api/overview').then(renderDashboard);
+      return reload().then(() => poll(reload));
+    },
+  },
+  {
+    match: /^processing$/,
+    load: () => {
+      const reload = () => api('/api/sources').then(renderProcessing);
+      return reload().then(() => poll(reload));
+    },
+  },
   { match: /^outputs$/, load: () => api('/api/outputs').then(renderOutputs) },
   {
     match: /^outputs\/(.+)$/,
@@ -600,6 +659,7 @@ const routes = [
 ];
 
 async function route() {
+  stopPoll();
   const path = location.hash.replace(/^#\/?/, '').replace(/\/$/, '');
 
   document.querySelectorAll('#nav a').forEach((link) => {

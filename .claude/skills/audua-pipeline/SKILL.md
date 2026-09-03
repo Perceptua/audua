@@ -21,12 +21,35 @@ is a commitment, not a quick command. If the inbox is empty, say so and stop.
 
 ## 2. Run the batch
 
+Launch it fully detached, not with a plain `run_in_background: true` Bash call.
+Transcription can run for hours, and a process left attached to this session's
+shell gets SIGHUP'd and dies silently — no exception, no `aborted` field in the
+report, it just vanishes — the moment this session ends or gets torn down.
+This has happened repeatedly. Detach it so it survives independently:
+
 ```bash
-uv run audua batch
+touch /tmp/audua_batch_started
+nohup uv run audua batch > processing/output/_batch.log 2>&1 < /dev/null & disown
 ```
 
-**Run it in the background** (`run_in_background: true`) and tell the user it is
-running. Do not sit in a polling loop; you are notified when it exits.
+Tell the user it is running and where the log is. To be notified once it
+finishes without a manual polling loop, use `Bash` with `run_in_background:
+true` on a short wait command *for the notification only* — the `audua batch`
+process above is already independent of this wait command's fate, so it is
+fine if this wait command itself gets cut off by a session ending:
+
+```bash
+until [ -f processing/output/_batches/latest.json ] && \
+      [ processing/output/_batches/latest.json -nt /tmp/audua_batch_started ]; do
+  sleep 5
+done
+```
+
+The marker file, touched right before launch, is what makes "just finished"
+distinguishable from "a report already sat there from a prior run". If this
+session ends before the wait command fires, re-check
+`processing/output/_batches/latest.json`'s `completed` timestamp or
+`processing/output/_batch.log` in the next session to see whether it finished.
 
 That one command does all of this:
 

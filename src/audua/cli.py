@@ -291,7 +291,7 @@ def _ui_background(args: argparse.Namespace, roots: Roots) -> int:
     else:
         detach["start_new_session"] = True
 
-    with open(log_path, "ab") as log_file:
+    with log_path.open("ab") as log_file:
         process = subprocess.Popen(
             command,
             stdin=subprocess.DEVNULL,

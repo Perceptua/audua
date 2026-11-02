@@ -257,7 +257,7 @@ def split_long(
             # cut falls between words instead of through one.
             candidates = [
                 (earlier[1] + later[0]) / 2.0
-                for earlier, later in zip(inside, inside[1:])
+                for earlier, later in zip(inside, inside[1:], strict=False)
                 if cursor + 0.1 < (earlier[1] + later[0]) / 2.0 <= limit
             ]
             cut = max(candidates) if candidates else limit

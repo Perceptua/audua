@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator
 
 import numpy as np
 

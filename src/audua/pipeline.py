@@ -18,15 +18,15 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .audio import AudioError, AudioInfo, extract_clip, probe
 from .config import AUDIO_EXTENSIONS, DIGEST_NAME, SUMMARY_NAME, Config, format_time
 from .segments import (
     Clip,
-    default_override_path,
     build_clips,
+    default_override_path,
     load_overrides,
     summarise,
 )
@@ -61,7 +61,7 @@ def _vad_params(config: Config) -> dict:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -188,9 +188,7 @@ def _clip_is_done(
         return False
     if abs(float(recorded.get("end", -1)) - clip.end) > 1e-3:
         return False
-    if transcribing and "transcript" not in sidecar:
-        return False
-    return True
+    return not transcribing or "transcript" in sidecar
 
 
 # --------------------------------------------------------------------------

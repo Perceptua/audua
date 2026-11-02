@@ -248,7 +248,7 @@ def test_override_overlapping_speech_does_not_duplicate_audio(recording, tmp_pat
     config = base_config(tmp_path)
     manifest, _, _ = run(recording, config)
     spans = sorted((c["start"], c["end"]) for c in manifest["clips"])
-    for earlier, later in zip(spans, spans[1:]):
+    for earlier, later in zip(spans, spans[1:], strict=False):
         assert earlier[1] <= later[0] + 1e-6, f"clips overlap: {earlier} and {later}"
 
 
